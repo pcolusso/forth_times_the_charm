@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use thiserror::Error;
 
 struct Machine {
     stack: Vec<i64>,
@@ -16,10 +17,14 @@ enum Token {
     Op(Definition),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum ForthError {
+    #[error("Found an undefined word")]
     WordNotDefined(String),
-    StackUnderflow
+    #[error("Not enough values on the stack to exec op")]
+    StackUnderflow,
+    #[error("Attempted to divide by zero")]
+    DivByZero
 }
 
 fn add(stack: &mut Vec<i64>) -> Result<(), ForthError>  {
@@ -44,12 +49,63 @@ fn sub(stack: &mut Vec<i64>) -> Result<(), ForthError> {
     }
 }
 
+fn mul(stack: &mut Vec<i64>) -> Result<(), ForthError> {
+    let lhs = stack.pop();
+    let rhs = stack.pop();
+    if let (Some(lhs), Some(rhs)) = (lhs, rhs) {
+        stack.push(lhs * rhs);
+        Ok(())
+    } else {
+        Err(ForthError::StackUnderflow)
+    }
+}
+
+fn div(stack: &mut Vec<i64>) -> Result<(), ForthError> {
+    let lhs = stack.pop();
+    let rhs = stack.pop();
+    if let (Some(lhs), Some(rhs)) = (lhs, rhs) {
+        let res = lhs.checked_div(rhs);
+        match res {
+            Some(n) => stack.push(n),
+            None => return Err(ForthError::DivByZero)
+        }
+        Ok(())
+    } else {
+        Err(ForthError::StackUnderflow)
+    }
+}
+
+fn print(stack: &mut Vec<i64>) -> Result<(), ForthError> {
+    match stack.last() {
+        Some(n) => {
+            println!("{}", n);
+            Ok(())
+        },
+        None => Err(ForthError::StackUnderflow)
+    }
+
+}
+
+fn dup(stack: &mut Vec<i64>) -> Result<(), ForthError> {
+    match stack.last() {
+        Some(n) => {
+            stack.push(n.clone());
+            Ok(())
+        },
+        None => Err(ForthError::StackUnderflow)
+    }
+}
+
 impl Machine {
     pub fn new() -> Self {
         let stack = vec![];
         let mut definitions = HashMap::new();
         definitions.insert("+".to_owned(), Definition::Native(add));
         definitions.insert("-".to_owned(), Definition::Native(sub));
+        definitions.insert("*".to_owned(), Definition::Native(mul));
+        definitions.insert("/".to_owned(), Definition::Native(div));
+        definitions.insert("dup".to_owned(), Definition::Native(dup));
+        definitions.insert(".".to_owned(), Definition::Native(print));
 
         Self { stack, definitions }
     }
@@ -92,19 +148,36 @@ impl Machine {
         Ok(())
     }
 
-    pub fn peek(&self) -> &i64 {
-        self.stack.last().unwrap()
-    }
 }
 
-fn main() -> Result<(), ForthError> {
+use rustyline::{DefaultEditor, error::ReadlineError};
+
+fn main() -> Result<(), anyhow::Error> {
     let mut machine = Machine::new();
+    let mut rl = DefaultEditor::new()?;
 
-    let toks = machine.lex("10 20 +")?;
-
-    machine.exec(toks)?;
-
-    println!("{:?}", machine.peek());
+    loop {
+        let readline = rl.readline(">> ");
+        match readline {
+            Ok(line) => {
+                let toks = machine.lex(&line)?;
+                machine.exec(toks)?;
+                eprintln!("{:?}", machine.stack);
+            },
+            Err(ReadlineError::Interrupted) => {
+                eprintln!("Terminated");
+                break
+            },
+            Err(ReadlineError::Eof) => {
+                eprintln!("All done");
+                break
+            },
+            Err(err) => {
+                eprintln!("Error {:?}", err);
+                break
+            }
+        }
+    }
 
     Ok(())
 }
