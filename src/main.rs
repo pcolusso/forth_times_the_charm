@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{VecDeque, HashMap};
 use thiserror::Error;
 
 struct Machine {
@@ -12,6 +12,16 @@ enum Definition {
     Tokens(String),
 }
 
+impl std::fmt::Debug for Definition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Definition::Native(_) => write!(f, "Native"),
+            Definition::Tokens(s) => write!(f, "Tokens({})", s),
+        }
+    }
+}
+
+#[derive(Debug)]
 enum Token {
     Number(i64),
     Op(Definition),
@@ -106,25 +116,56 @@ impl Machine {
         definitions.insert("/".to_owned(), Definition::Native(div));
         definitions.insert("dup".to_owned(), Definition::Native(dup));
         definitions.insert(".".to_owned(), Definition::Native(print));
-
+        definitions.insert("drop".to_owned(), Definition::Native(|stack| {
+            stack.pop();
+            Ok(())
+        }));
         Self { stack, definitions }
     }
 
-    pub fn lex(&self, input: &str) -> Result<Vec<Token>, ForthError> {
-        input
-            .split_whitespace()
-            .map(|w| {
-                if let Ok(number) = w.parse::<i64>() {
-                    return Ok(Token::Number(number));
-                }
+    pub fn lex(&mut self, input: &str) -> Result<Vec<Token>, ForthError> {
+        enum LexMode {
+            Interpreting,
+            Defining(VecDeque<String>)
+        }
+        let mut tokens = vec!(); 
+        let mut mode = LexMode::Interpreting;
 
-                if let Some(def) = self.definitions.get(w) {
-                    return Ok(Token::Op(def.clone()));
-                }
+        for word in input.split_whitespace() {
+            match &mut mode {
+                LexMode::Interpreting => {
+                    if let Ok(number) = word.parse::<i64>() {
+                        tokens.push(Token::Number(number));
+                        continue;
+                    }
+                    if let Some(def) = self.definitions.get(word) {
+                        tokens.push(Token::Op(def.clone()));
+                        continue;
+                    }
 
-                return Err(ForthError::WordNotDefined(w.to_owned()));
-            })
-            .collect()
+                    if word == ":" {
+                        mode = LexMode::Defining(VecDeque::new());
+                        continue;
+                    }
+
+                    return Err(ForthError::WordNotDefined(word.to_owned()));
+                },
+                LexMode::Defining(current) => {
+                    if word == ";" {
+                        let name = current.pop_back();
+                        let spaced_back = itertools::join(current, " ");
+                        let definition = Definition::Tokens(spaced_back);
+                        self.definitions.insert(name.unwrap(), definition);
+                        eprintln!("{:?}", &self.definitions);
+                        
+                        mode = LexMode::Interpreting;
+                    } else {
+                        current.push_front(word.to_owned());
+                    }
+                }
+            }
+        }
+        Ok(tokens)
     }
 
     pub fn exec(&mut self, tokens: Vec<Token>) -> Result<(), ForthError> {
@@ -141,8 +182,9 @@ impl Machine {
     pub fn run(&mut self, definition: Definition) -> Result<(), ForthError> {
         match definition {
             Definition::Native(func) => func(&mut self.stack)?,
-            Definition::Tokens(_toks) => {
-                unimplemented!();
+            Definition::Tokens(toks) => {
+                let toks = self.lex(&toks)?;
+                self.exec(toks)?;
             }
         }
         Ok(())
