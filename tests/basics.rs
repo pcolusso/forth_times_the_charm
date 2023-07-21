@@ -3,11 +3,11 @@ use assert_cmd::Command;
 const BINARY_NAME: &str = "forth_times_the_charm";
 
 #[test]
-fn if_gauntlet() {
+fn if_nested() {
     make_command()
-        .write_stdin("1 1 if 2 2 if 3 else 4 then else 5 5 if 6 else 7 then then .")
+        .write_stdin("1 if if 420 else -3 then else -2 then .")
         .assert()
-        .stdout(predicates::str::diff("3\n"));
+        .stdout(predicates::str::diff("420\n"));
 }
 
 #[test]

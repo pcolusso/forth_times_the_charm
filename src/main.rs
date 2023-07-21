@@ -73,6 +73,8 @@ fn add(stack: &mut Vec<i64>) -> Result<(), ForthError> {
     }
 }
 
+// Please subscribe to my
+// |--------|
 fn sub(stack: &mut Vec<i64>) -> Result<(), ForthError> {
     let rhs = stack.pop();
     let lhs = stack.pop();
@@ -287,8 +289,8 @@ impl Machine {
                 (ExecMode::Normal, Token::Op(def)) => self.run(def)?,
                 (ExecMode::Normal, Token::Keyword(kw)) => match kw {
                     Keyword::If => {
-                        if let Some(condition) = self.stack.pop() {
-                            if condition != 0 {
+                        if let Some(condition) = self.stack.last() {
+                            if *condition != 0 {
                                 mode_stack.push(ExecMode::IfTrue(CaptureMode {
                                     tokens: vec![],
                                     capture: true,
@@ -327,8 +329,8 @@ impl Machine {
                         }
                     },
                     Keyword::If => {
-                        if let Some(condition) = self.stack.pop() {
-                            if condition != 0 {
+                        if let Some(condition) = self.stack.last() {
+                            if *condition != 0 {
                                 mode_stack.push(ExecMode::IfTrue(CaptureMode {
                                     tokens: vec![],
                                     capture: true,
@@ -358,8 +360,8 @@ impl Machine {
                         }
                     }
                     Keyword::If => {
-                        if let Some(condition) = self.stack.pop() {
-                            if condition != 0 {
+                        if let Some(condition) = self.stack.last() {
+                            if *condition != 0 {
                                 mode_stack.push(ExecMode::IfTrue(CaptureMode {
                                     tokens: vec![],
                                     capture: true,
