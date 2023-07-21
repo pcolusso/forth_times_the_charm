@@ -3,6 +3,14 @@ use assert_cmd::Command;
 const BINARY_NAME: &str = "forth_times_the_charm";
 
 #[test]
+fn if_nested() {
+    make_command()
+        .write_stdin("1 if if 420 else -3 then else -2 then .")
+        .assert()
+        .stdout(predicates::str::diff("420\n"));
+}
+
+#[test]
 fn if_then_else() {
     make_command()
         .write_stdin("10 20 < if 1 else 0 then .")

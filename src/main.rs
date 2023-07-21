@@ -73,6 +73,8 @@ fn add(stack: &mut Vec<i64>) -> Result<(), ForthError> {
     }
 }
 
+// Please subscribe to my
+// |--------|
 fn sub(stack: &mut Vec<i64>) -> Result<(), ForthError> {
     let rhs = stack.pop();
     let lhs = stack.pop();
@@ -277,25 +279,27 @@ impl Machine {
             IfFalse(CaptureMode),
         }
 
-        let mut mode = ExecMode::Normal;
+        let mut mode_stack = vec!();
+        mode_stack.push(ExecMode::Normal);
 
         for token in tokens {
-            match (&mut mode, token) {
+            let mut mode = mode_stack.last_mut().unwrap();
+            match (mode, token) {
                 (ExecMode::Normal, Token::Number(n)) => self.stack.push(n),
                 (ExecMode::Normal, Token::Op(def)) => self.run(def)?,
                 (ExecMode::Normal, Token::Keyword(kw)) => match kw {
                     Keyword::If => {
-                        if let Some(condition) = self.stack.pop() {
-                            if condition != 0 {
-                                mode = ExecMode::IfTrue(CaptureMode {
+                        if let Some(condition) = self.stack.last() {
+                            if *condition != 0 {
+                                mode_stack.push(ExecMode::IfTrue(CaptureMode {
                                     tokens: vec![],
                                     capture: true,
-                                });
+                                }));
                             } else {
-                                mode = ExecMode::IfFalse(CaptureMode {
+                                mode_stack.push(ExecMode::IfFalse(CaptureMode {
                                     tokens: vec![],
                                     capture: false,
-                                });
+                                }));
                             }
                         } else {
                             return Err(ForthError::StackUnderflow);
@@ -316,28 +320,65 @@ impl Machine {
                     Keyword::Else => tokens.capture = true,
                     Keyword::Then => {
                         // Cheeky swap the mode around
-                        let old = std::mem::replace(&mut mode, ExecMode::Normal);
+                        let old = mode_stack.pop();
                         // Force old into a IfFalse, we know thats what it is
-                        if let ExecMode::IfFalse(old) = old {
+                        if let Some(ExecMode::IfFalse(old)) = old {
                             self.exec(old.tokens)?;
                         } else {
                             unreachable!();
                         }
+                    },
+                    Keyword::If => {
+                        if let Some(condition) = self.stack.last() {
+                            if *condition != 0 {
+                                mode_stack.push(ExecMode::IfTrue(CaptureMode {
+                                    tokens: vec![],
+                                    capture: true,
+                                }));
+                            } else {
+                                mode_stack.push(ExecMode::IfFalse(CaptureMode {
+                                    tokens: vec![],
+                                    capture: false,
+                                }));
+                            }
+                        } else {
+                            return Err(ForthError::StackUnderflow);
+                        }
                     }
-                    _ => return Err(ForthError::UnbalancedIf),
+                    Keyword::Do => {
+                        todo!();
+                    }
                 },
                 (ExecMode::IfTrue(tokens), Token::Keyword(kw)) => match kw {
                     Keyword::Else => tokens.capture = false,
                     Keyword::Then => {
-                        // Cheeky swap the mode around
-                        let old = std::mem::replace(&mut mode, ExecMode::Normal);
-                        if let ExecMode::IfTrue(old) = old {
+                        let old = mode_stack.pop();
+                        if let Some(ExecMode::IfTrue(old)) = old {
                             self.exec(old.tokens)?;
                         } else {
                             unreachable!();
                         }
                     }
-                    _ => return Err(ForthError::UnbalancedIf),
+                    Keyword::If => {
+                        if let Some(condition) = self.stack.last() {
+                            if *condition != 0 {
+                                mode_stack.push(ExecMode::IfTrue(CaptureMode {
+                                    tokens: vec![],
+                                    capture: true,
+                                }));
+                            } else {
+                                mode_stack.push(ExecMode::IfFalse(CaptureMode {
+                                    tokens: vec![],
+                                    capture: false,
+                                }));
+                            }
+                        } else {
+                            return Err(ForthError::StackUnderflow);
+                        }
+                    },
+                    Keyword::Do => {
+                        todo!();
+                    }
                 },
             }
         }
